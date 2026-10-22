@@ -164,7 +164,7 @@ function Test-QuoteAdjacent {
 
 function Get-DiffAnchors {
     # 从 git diff 里提取"被改动的定义"作为锚点：类/函数/表/配置键/注解字符串
-    param([string]$GitRoot, [string]$Spec)
+    param([string]$GitRoot, [string]$Spec, [hashtable]$AllowExt)
 
     $gitArgs = @('diff', '--unified=0', '--no-color')
     switch ($Spec) {
@@ -198,9 +198,12 @@ function Get-DiffAnchors {
 
     foreach ($line in $raw) {
         if ($line -match '^\+\+\+ b/(.+)$') {
-            $curExt = [System.IO.Path]::GetExtension($Matches[1]).ToLowerInvariant()
+            $e = [System.IO.Path]::GetExtension($Matches[1].Trim()).ToLowerInvariant()
+            $curExt = if ($AllowExt -and $AllowExt.ContainsKey($e)) { $e } else { '' }
             continue
         }
+        if ($line -match '^\+\+\+ /dev/null') { $curExt = ''; continue }
+        if (-not $curExt) { continue }
         if ($line -notmatch '^[+-]' -or $line -match '^(\+\+\+|---)') { continue }
         $body = $line.Substring(1)
         if ([string]::IsNullOrWhiteSpace($body)) { continue }
@@ -329,6 +332,11 @@ if (-not (Test-Path -LiteralPath $Root -PathType Container)) {
 }
 $rootFull = (Resolve-Path -LiteralPath $Root).ProviderPath.TrimEnd('\', '/')
 
+$IncludeSet = @{}
+foreach ($e in $Include) {
+    $k = if ($e.StartsWith('.')) { $e.ToLowerInvariant() } else { ('.' + $e).ToLowerInvariant() }
+    $IncludeSet[$k] = $true
+}
 $gitRoots = @(Find-GitRoots -RootPath $rootFull)
 
 $diffAnchors = @()
@@ -338,7 +346,7 @@ if ($Diff) {
         $diffNote = "指定了 -Diff '$Diff'，但根目录及下一级都没有 git 仓库"
     }
     else {
-        $diffAnchors = @(Get-DiffAnchors -GitRoot $gitRoots[0] -Spec $Diff)
+        $diffAnchors = @(Get-DiffAnchors -GitRoot $gitRoots[0] -Spec $Diff -AllowExt $IncludeSet)
         if ($diffAnchors.Count -eq 0) {
             $diffNote = "diff '$Diff' 里没有提取到锚点（可能只改了空格/注释，或版本范围写错）"
         }
@@ -372,11 +380,7 @@ $sortedVariants = @($allVariants | Sort-Object -Property Length -Descending)
 $alt = ($sortedVariants | ForEach-Object { [regex]::Escape($_) }) -join '|'
 $rx = [regex]::new($alt, $RxOpt)
 
-$IncludeSet = @{}
-foreach ($e in $Include) {
-    $k = if ($e.StartsWith('.')) { $e.ToLowerInvariant() } else { ('.' + $e).ToLowerInvariant() }
-    $IncludeSet[$k] = $true
-}
+
 
 # ---------- 遍历文件 ----------
 $files = [System.Collections.Generic.List[string]]::new()

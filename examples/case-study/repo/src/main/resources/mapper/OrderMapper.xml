@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.acme.order.OrderMapper">
+
+    <select id="searchByApplicant" resultType="com.acme.order.OrderVo">
+        SELECT id,
+               applicant_name AS applicantName
+        FROM order_main
+        WHERE applicant_name LIKE CONCAT('%', #{applicantName}, '%')
+    </select>
+
+</mapper>

@@ -10,7 +10,7 @@
 [user_profile]  命中 13 处   L3=2  L2=8  L1=3
 ==============================================================================
 
-  L3 数据/配置契约（改了不可回滚，重点看）
+  L3 数据/配置契约（回滚成本高，重点看）
     migrations\0007_profile.sql:1
       ALTER TABLE user_profile ADD COLUMN nick_name VARCHAR(64);
     migrations\0007_profile.sql:2 [sub]
@@ -48,7 +48,7 @@
 [nick_name]  命中 6 处   L3=2  L2=2  L1=2
 ==============================================================================
 
-  L3 数据/配置契约（改了不可回滚，重点看）
+  L3 数据/配置契约（回滚成本高，重点看）
     tests\fixtures\user.json:1 [test str]
       { "uid": 1, "nick_name": "x" }
     migrations\0007_profile.sql:1
@@ -73,7 +73,7 @@
     tests\test_user.py
     tests\fixtures\user.json
 
-用时 189 ms
+用时 371 ms
 
 提示：本脚本只找命中，定级与判定由分析者负责；截断或跳过的路径必须写进报告的未验证项。
 

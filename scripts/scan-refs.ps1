@@ -184,6 +184,7 @@ function Get-DiffAnchors {
         '\bfunc\s+(?:\([^)]*\)\s*)?([A-Za-z_][\w\-]{2,})',
         '\bfunction\s+([A-Za-z_][\w\-]{2,})',
         '\b(?:public|private|protected)\s+(?:static\s+|final\s+|abstract\s+|synchronized\s+)*[\w<>\[\],\.\?\s]+\s+([A-Za-z_]\w{2,})\s*\(',
+        '^\s*[\w<>\[\],\.\?]+\s+([A-Za-z_]\w{2,})\s*\([^;]*\)\s*\{',
         '\bconst\s+([A-Za-z_]\w{2,})\s*=',
         '\b(?:ALTER|CREATE|DROP)\s+TABLE\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?\W?([A-Za-z_][\w\.]*)',
         '\b(?:UPDATE|FROM|INTO|JOIN)\s+([A-Za-z_]\w{3,})',
@@ -226,7 +227,10 @@ function Get-DiffAnchors {
         }
     }
 
-    $ranked = $order | Sort-Object -Stable | Sort-Object { $hits[$_] } -Descending
+    # 5.1 的 Sort-Object 没有 -Stable：用「次数降序 + 首次出现升序」的复合排序保证稳定
+    $orderIndex = @{}
+    for ($oi = 0; $oi -lt $order.Count; $oi++) { $orderIndex[$order[$oi]] = $oi }
+    $ranked = $order | Sort-Object @{ Expression = { $hits[$_] }; Descending = $true }, @{ Expression = { $orderIndex[$_] }; Ascending = $true }
     return @($ranked | Select-Object -First 12)
 }
 
@@ -247,13 +251,13 @@ function Get-TestCandidates {
         $cands = @()
         switch ($ext) {
             '.java' {
-                $t = $rel -replace '[\\/]src[\\/]main[\\/]java[\\/]', '\src\test\java\'
+                $t = $rel -replace '(^|[\\/])src[\\/]main[\\/]java[\\/]', '$1src\test\java\'
                 $t = $t -replace '\.java$', 'Test.java'
                 $cands += $t
                 $cands += ($t -replace 'Test\.java$', 'Tests.java')
             }
             '.kt' {
-                $t = $rel -replace '[\\/]src[\\/]main[\\/]kotlin[\\/]', '\src\test\kotlin\'
+                $t = $rel -replace '(^|[\\/])src[\\/]main[\\/]kotlin[\\/]', '$1src\test\kotlin\'
                 $cands += ($t -replace '\.kt$', 'Test.kt')
             }
             '.cs' { $cands += ($rel -replace '\.cs$', 'Tests.cs') }
@@ -631,7 +635,7 @@ foreach ($sym in $Symbol) {
     Write-Host ("[{0}]  命中 {1} 处   L3={2}  L2={3}  L1={4}{5}" -f $sym, $total, $l3.Count, $l2.Count, $l1.Count, $flag)
     Write-Host ('=' * 78)
 
-    Show-Group -Items $l3 -Label 'L3 数据/配置契约（改了不可回滚，重点看）' -Limit 40
+    Show-Group -Items $l3 -Label 'L3 数据/配置契约（回滚成本高，重点看）' -Limit 40
 
     $l2str = @($l2 | Where-Object { $_.InStr })
     $l2sub = @($l2 | Where-Object { -not $_.InStr })

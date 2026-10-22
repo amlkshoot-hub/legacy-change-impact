@@ -44,7 +44,7 @@ A skill for AI coding agents: before you modify legacy code, map every reference
 需要 PowerShell 5.1 或 7（Windows 自带），git 可选。
 
 ```powershell
-git clone https://github.com/amlikshoot/legacy-change-impact.git
+git clone https://github.com/amlkshoot-hub/legacy-change-impact.git
 cd legacy-change-impact
 
 .\scripts\scan-refs.ps1 -Root .\examples\demo-repo `

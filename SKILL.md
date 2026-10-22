@@ -13,6 +13,8 @@ description: 分析老项目（legacy 代码）的变更影响面：在修改、
 
 需要两样东西：变更锚点（要改什么）和仓库根目录。锚点不清楚就先问一句，不要靠猜开工。
 
+如果只知道"我改了几个文件"而说不出符号名，用 `-Diff` 让脚本从 git diff 里自己提取锚点。
+
 ## 第一步：把"改什么"拆成符号清单
 
 | 变更类型 | 锚点符号 |
@@ -31,7 +33,13 @@ description: 分析老项目（legacy 代码）的变更影响面：在修改、
 ```powershell
 # 在本技能目录下执行；<repo> 换成目标仓库根目录
 .\scripts\scan-refs.ps1 -Root <repo> -Symbol 旧函数名,表名,config.key
+
+# 只知道"改了个分支/改了工作区"，不知道该扫什么符号：
+.\scripts\scan-refs.ps1 -Root <repo> -Diff HEAD~1
+.\scripts\scan-refs.ps1 -Root <repo> -Diff working
 ```
+
+**符号只写一个就够。** 脚本会把 `WlwCardApplication` 自动派生成 `wlw_card_application`、`wlw-card-application`、`WLW_CARD_APPLICATION`、`wlwCardApplication` 等 6 种写法一起扫，所以一个类名就能带出表名、迁移脚本和 MyBatis XML。只有跨语言手工命名完全对不上时，才需要补第二个符号。
 
 需要历史风险信号时再加 `-Git`：它会用 `git log -S` 追溯每个符号的历史改动，大仓库可能要跑几分钟，所以先出底稿、再补历史。
 
@@ -69,10 +77,12 @@ description: 分析老项目（legacy 代码）的变更影响面：在修改、
 按 [references/report-template.md](references/report-template.md) 输出三块：影响面表、回归清单、回滚点。
 
 回归清单的硬要求：
+- **以脚本末尾的"建议执行的回归"为起点**。它已经列出了命中的测试文件、按命名约定推测且真实存在的测试类，以及可直接执行的命令（mvn / gradle / pytest / npm / go test），不要无视它凭空编用例
 - 每条写成"操作 → 预期结果"，能被人或测试直接执行
 - 覆盖全部 P0 和 P1，一条不漏
 - 不写"测试相关功能正常"这类无法执行的句子
 - 无法自动验证的手工项单独标出来
+- 脚本报告"未找到相关测试文件"时，把这条写进未验证项，**不要声称已验证**
 
 ## 停止规则
 

@@ -2,31 +2,12 @@
 扫描根目录 : D:\workspace\skills\legacy-change-impact\examples\demo-repo
 文件数     : 9
 读取体积   : 0 MB
-符号       : get_user_profile, user_profile, profile_cache_ttl, nick_name
-图例       : [str]=字符串内引用  [sub]=同源命名  [test]=测试资产
+锚点       : user_profile, nick_name
+命名变体   : user_profile(6变体)  nick_name(6变体)
+图例       : [str]=字符串内引用  [sub]=同源命名  [var:]=变体命中  [test]=测试资产
 
 ==============================================================================
-[get_user_profile]  命中 6 处   L3=0  L2=1  L1=5
-==============================================================================
-
-  L2 字符串内引用（不报错，静默出错）
-    app\api\routes.py:6 [str]
-      add_route("/api/v1/users/profile", "get_user_profile")
-
-  L1 静态引用（编译器会报）
-    tests\test_user.py:1 [test]
-      from app.services.user_service import get_user_profile
-    tests\test_user.py:4 [test]
-      assert get_user_profile(1)["nick_name"] == "x"
-    app\tasks.py:1
-      from app.services.user_service import get_user_profile
-    app\tasks.py:6
-      return get_user_profile(uid)
-    app\services\user_service.py:3
-      def get_user_profile(uid: int) -> dict:
-
-==============================================================================
-[user_profile]  命中 10 处   L3=2  L2=8  L1=0
+[user_profile]  命中 13 处   L3=2  L2=8  L1=3
 ==============================================================================
 
   L3 数据/配置契约（改了不可回滚，重点看）
@@ -38,15 +19,15 @@
   L2 字符串内引用（不报错，静默出错）
     app\models.py:2 [str]
       __tablename__ = "user_profile"
-    app\tasks.py:4 [str]
+    app\tasks.py:4 [str sub]
       @shared_task(name="sync_user_profile")
-    app\api\routes.py:6 [str]
+    app\api\routes.py:6 [str sub]
       add_route("/api/v1/users/profile", "get_user_profile")
 
   L2 同源命名（可能同源，逐个确认是否要跟着改）
-    tests\test_user.py:1 [test]
+    tests\test_user.py:1 [test sub]
       from app.services.user_service import get_user_profile
-    tests\test_user.py:4 [test]
+    tests\test_user.py:4 [test sub]
       assert get_user_profile(1)["nick_name"] == "x"
     app\tasks.py:1 [sub]
       from app.services.user_service import get_user_profile
@@ -55,26 +36,26 @@
     app\services\user_service.py:3 [sub]
       def get_user_profile(uid: int) -> dict:
 
+  L1 静态引用（编译器会报）
+    app\models.py:1 [var:UserProfile]
+      class UserProfile:
+    app\services\user_service.py:1 [var:UserProfile]
+      from app.models import UserProfile
+    app\services\user_service.py:4 [var:UserProfile]
+      row = UserProfile.query.filter_by(uid=uid).first()
+
 ==============================================================================
-[profile_cache_ttl]  命中 1 处   L3=1  L2=0  L1=0
+[nick_name]  命中 6 处   L3=2  L2=2  L1=2
 ==============================================================================
 
   L3 数据/配置契约（改了不可回滚，重点看）
-    config\settings.yml:2
-      profile_cache_ttl: 1d
-
-==============================================================================
-[nick_name]  命中 5 处   L3=2  L2=2  L1=1
-==============================================================================
-
-  L3 数据/配置契约（改了不可回滚，重点看）
-    tests\fixtures\user.json:1 [test]
+    tests\fixtures\user.json:1 [test str]
       { "uid": 1, "nick_name": "x" }
     migrations\0007_profile.sql:1
       ALTER TABLE user_profile ADD COLUMN nick_name VARCHAR(64);
 
   L2 字符串内引用（不报错，静默出错）
-    tests\test_user.py:4 [test]
+    tests\test_user.py:4 [test str]
       assert get_user_profile(1)["nick_name"] == "x"
     app\services\user_service.py:5 [str]
       return {"uid": row.uid, "nick_name": row.nick_name}
@@ -82,8 +63,17 @@
   L1 静态引用（编译器会报）
     app\models.py:4
       nick_name = ""
+    app\services\user_service.py:5
+      return {"uid": row.uid, "nick_name": row.nick_name}
 
-用时 190 ms
+==============================================================================
+建议执行的回归
+==============================================================================
+  命中里直接出现的测试资产:
+    tests\test_user.py
+    tests\fixtures\user.json
+
+用时 189 ms
 
 提示：本脚本只找命中，定级与判定由分析者负责；截断或跳过的路径必须写进报告的未验证项。
 

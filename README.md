@@ -40,6 +40,11 @@ A skill for AI coding agents: before modifying legacy code, map the references a
 人工逐条判定后：**29 处必须同步、3 处建议同步、1 处误报**，另有 **5 类漏报**被明确记录（文档、运行时拼接、库内对象、跨仓库引用、输出截断）。
 
 案例文档把误报和漏报都列了出来，也写清了"这个案例能说明什么、不能说明什么"：[CASE-STUDY.md](examples/case-study/CASE-STUDY.md)
+### 第二个案例：当工具没帮上忙时
+
+同样来自真实项目（标识符已替换）：一次"新增私有方法 + 接口加参数"的改动，工具扫出 10 处命中、全部是 L1，**没有任何需要牵连修改的地方**——而真正会出事的地方在分页语义、时间戳配对和中文文案依赖上，静态扫描完全无感。
+
+这份报告如实记录了工具边际价值接近于零的一次分析，也标出了它的能力边界：[real-world/2026-09-21-card-log-filter.md](examples/real-world/2026-09-21-card-log-filter.md)
 
 ## 它做什么
 

@@ -234,48 +234,68 @@ function Get-DiffAnchors {
     return @($ranked | Select-Object -First 12)
 }
 
+function Join-RelPath {
+    # 按路径段拼接，不依赖分隔符字面量（Windows / Linux 通用）
+    param([string]$Base, [string]$Rel)
+    $p = $Base
+    foreach ($seg in ($Rel -split '[\\/]+')) {
+        if ($seg) { $p = Join-Path $p $seg }
+    }
+    return $p
+}
+
+function To-NativeRel {
+    # 把统一用 / 表示的相对路径转成当前平台的分隔符
+    param([string]$Rel)
+    $parts = @($Rel -split '[\\/]+' | Where-Object { $_ })
+    return ($parts -join [System.IO.Path]::DirectorySeparatorChar)
+}
+
 function Get-TestCandidates {
-    # 由命中源文件推测测试文件路径，并标注是否真实存在
+    # 由命中源文件推测测试文件路径，并标注是否真实存在。
+    # 内部统一用 / 计算，输出时转成平台分隔符，避免 Windows/Linux 差异。
     param([string]$RootPath, [string[]]$SourceFiles)
 
     $result = [System.Collections.Generic.List[object]]::new()
     $seen = @{}
 
-    foreach ($rel in $SourceFiles) {
-        $dir = [System.IO.Path]::GetDirectoryName($rel)
-        if ([string]::IsNullOrEmpty($dir)) { $dir = '.' }
+    foreach ($relRaw in $SourceFiles) {
+        $rel = $relRaw -replace '\\', '/'
         $name = [System.IO.Path]::GetFileNameWithoutExtension($rel)
         $ext = [System.IO.Path]::GetExtension($rel).ToLowerInvariant()
         if (-not $name) { continue }
 
+        $slash = $rel.LastIndexOf('/')
+        $dir = if ($slash -gt 0) { $rel.Substring(0, $slash) } else { '' }
+
         $cands = @()
         switch ($ext) {
             '.java' {
-                $t = $rel -replace '(^|[\\/])src[\\/]main[\\/]java[\\/]', '$1src\test\java\'
+                $t = $rel -replace '(^|/)src/main/java/', '${1}src/test/java/'
                 $t = $t -replace '\.java$', 'Test.java'
                 $cands += $t
                 $cands += ($t -replace 'Test\.java$', 'Tests.java')
             }
             '.kt' {
-                $t = $rel -replace '(^|[\\/])src[\\/]main[\\/]kotlin[\\/]', '$1src\test\kotlin\'
+                $t = $rel -replace '(^|/)src/main/kotlin/', '${1}src/test/kotlin/'
                 $cands += ($t -replace '\.kt$', 'Test.kt')
             }
             '.cs' { $cands += ($rel -replace '\.cs$', 'Tests.cs') }
             '.go' { $cands += ($rel -replace '\.go$', '_test.go') }
             '.py' {
-                $cands += (Join-Path $dir ("test_" + $name + '.py'))
-                $cands += (Join-Path $dir ($name + '_test.py'))
-                $cands += (Join-Path 'tests' ("test_" + $name + '.py'))
-                $cands += (Join-Path 'tests' ($name + '_test.py'))
+                $cands += ((@($dir, "test_$name.py") | Where-Object { $_ }) -join '/')
+                $cands += ((@($dir, "${name}_test.py") | Where-Object { $_ }) -join '/')
+                $cands += "tests/test_$name.py"
+                $cands += "tests/${name}_test.py"
             }
             '.ts' {
                 $cands += ($rel -replace '\.ts$', '.test.ts')
                 $cands += ($rel -replace '\.ts$', '.spec.ts')
-                $cands += (Join-Path $dir ("__tests__\" + $name + '.test.ts'))
+                $cands += ((@($dir, '__tests__', "$name.test.ts") | Where-Object { $_ }) -join '/')
             }
             '.tsx' {
                 $cands += ($rel -replace '\.tsx$', '.test.tsx')
-                $cands += (Join-Path $dir ("__tests__\" + $name + '.test.tsx'))
+                $cands += ((@($dir, '__tests__', "$name.test.tsx") | Where-Object { $_ }) -join '/')
             }
             '.js' {
                 $cands += ($rel -replace '\.js$', '.test.js')
@@ -283,15 +303,16 @@ function Get-TestCandidates {
             }
             '.vue' {
                 $cands += ($rel -replace '\.vue$', '.spec.ts')
-                $cands += (Join-Path $dir ("__tests__\" + $name + '.spec.ts'))
+                $cands += ((@($dir, '__tests__', "$name.spec.ts") | Where-Object { $_ }) -join '/')
             }
         }
 
         foreach ($c in $cands) {
-            $norm = $c -replace '/', '\'
+            $norm = To-NativeRel $c
+            if (-not $norm) { continue }
             if ($seen.ContainsKey($norm)) { continue }
             $seen[$norm] = $true
-            $full = Join-Path $RootPath $norm
+            $full = Join-RelPath -Base $RootPath -Rel $norm
             $result.Add([pscustomobject]@{
                 Source = $rel
                 Test   = $norm
@@ -301,7 +322,6 @@ function Get-TestCandidates {
     }
     return $result.ToArray()
 }
-
 function Get-TestRunner {
     # 探测构建系统，给出可执行的测试命令提示
     param([string]$RootPath, [string[]]$TestFiles)

@@ -33,3 +33,17 @@ jobs:
       - name: Run tests
         shell: powershell
         run: ./tests/run-tests.ps1
+
+  ubuntu-pwsh:
+    name: pwsh 7 (Ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show PowerShell version
+        shell: pwsh
+        run: $PSVersionTable.PSVersion.ToString()
+
+      - name: Run tests
+        shell: pwsh
+        run: ./tests/run-tests.ps1

@@ -1,7 +1,7 @@
 ﻿#requires -Version 5.1
 <#
 .SYNOPSIS
-    legacy-change-impact 的自动化验证。不依赖 Pester，pwsh 7 与 Windows PowerShell 5.1 均可运行。
+    legacy-change-impact 的自动化验证。不依赖 Pester，pwsh 7 / Windows PowerShell 5.1 / Linux pwsh 均可运行。
 
 .DESCRIPTION
     覆盖范围：
@@ -17,7 +17,7 @@
       · 失败时退出码非零
 
 .EXAMPLE
-    pwsh -File .\tests\run-tests.ps1
+    pwsh -File ./tests/run-tests.ps1
 #>
 [CmdletBinding()]
 param(
@@ -26,11 +26,26 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# 5.1 下 param 默认值里取 $PSScriptRoot 会得到空串，改在函数体里兜底
+# 5.1 下 param 默认值里取 $PSScriptRoot 会得到空串，改在脚本体里兜底
 if (-not $RepoRoot) { $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path) }
 
-$scriptPath = Join-Path $RepoRoot 'scripts\scan-refs.ps1'
-$caseRepo   = Join-Path $RepoRoot 'examples\case-study\repo'
+# ---------- 跨平台路径helper：一律按段拼接，不写死分隔符 ----------
+function Join-Rel {
+    param([string]$Base, [string]$Rel)
+    $p = $Base
+    foreach ($seg in ($Rel -split '[\\/]+')) {
+        if ($seg) { $p = Join-Path $p $seg }
+    }
+    return $p
+}
+
+function To-Slash {
+    param([string]$Path)
+    return ($Path -replace '\\', '/')
+}
+
+$scriptPath = Join-Rel $RepoRoot 'scripts/scan-refs.ps1'
+$caseRepo   = Join-Rel $RepoRoot 'examples/case-study/repo'
 $skillMd    = Join-Path $RepoRoot 'SKILL.md'
 
 if (-not (Test-Path $scriptPath)) { throw "找不到扫描脚本: $scriptPath" }
@@ -81,21 +96,25 @@ function New-DiffFixture {
     param([string]$Path)
 
     if (Test-Path $Path) { Remove-Item $Path -Recurse -Force }
-    $null = New-Item -ItemType Directory (Join-Path $Path 'src') -Force
+    $srcDir = Join-Path $Path 'src'
+    $null = New-Item -ItemType Directory $srcDir -Force
+
+    $javaFile = Join-Path $srcDir 'Service.java'
+    $mdFile   = Join-Path $Path 'notes.md'
 
     $javaV1 = "public class Service {" + "`r`n" + "    void oldMethod() {}" + "`r`n" + "}" + "`r`n"
     $mdV1 = "# Notes" + "`r`n" + "oldMethod is documented here." + "`r`n"
-    [System.IO.File]::WriteAllText((Join-Path $Path 'src\Service.java'), $javaV1, [System.Text.UTF8Encoding]::new($false))
-    [System.IO.File]::WriteAllText((Join-Path $Path 'notes.md'), $mdV1, [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($javaFile, $javaV1, [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($mdFile, $mdV1, [System.Text.UTF8Encoding]::new($false))
 
     & git -C $Path init -q 2>$null
     & git -C $Path add -A 2>$null
     & git -C $Path -c user.name=test -c user.email=test@example.com commit -qm init 2>$null
 
-    $javaV2 = "public class Service {" + "`r`n" + "    void oldMethod() {}" + "`r`n" + "    void addedMethod() {}" + "`r`n" + "}" + "`r`n"
+    $javaV2 = "public class Service {" + "`r`n" + "    void oldMethod() {}" + "`r`n" + "    public void addedMethod() {}" + "`r`n" + "}" + "`r`n"
     $mdV2 = "# Notes" + "`r`n" + "oldMethod is documented here." + "`r`n" + "docOnlyAnchor appears only in docs." + "`r`n"
-    [System.IO.File]::WriteAllText((Join-Path $Path 'src\Service.java'), $javaV2, [System.Text.UTF8Encoding]::new($false))
-    [System.IO.File]::WriteAllText((Join-Path $Path 'notes.md'), $mdV2, [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($javaFile, $javaV2, [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($mdFile, $mdV2, [System.Text.UTF8Encoding]::new($false))
 }
 
 try {
@@ -134,9 +153,9 @@ try {
         $j = Get-ScanJson @{ Root = $caseRepo; Symbol = 'applicant_name' }
         $hits = @($j.results[0].hits)
 
-        $annotation = @($hits | Where-Object { $_.File -like '*\Order.java' -and $_.Line -eq 14 })[0]
-        $migration  = @($hits | Where-Object { $_.File -like '*.sql' -and $_.File -like '*V12*' })[0]
-        $tsField    = @($hits | Where-Object { $_.File -like '*order.ts' -and $_.Line -eq 5 })[0]
+        $annotation = @($hits | Where-Object { (To-Slash $_.File) -like '*/Order.java' -and $_.Line -eq 14 })[0]
+        $migration  = @($hits | Where-Object { (To-Slash $_.File) -like '*.sql' -and (To-Slash $_.File) -like '*V12*' })[0]
+        $tsField    = @($hits | Where-Object { (To-Slash $_.File) -like '*order.ts' -and $_.Line -eq 5 })[0]
 
         $ok1 = $annotation -and $annotation.Lane -eq 'L2' -and $annotation.InStr
         $ok2 = $migration -and $migration.Lane -eq 'L3'
@@ -148,10 +167,10 @@ try {
     # ---------------------------------------------------------------- T05
     Invoke-Case 'T05 测试文件存在性' {
         $j = Get-ScanJson @{ Root = $caseRepo; Symbol = 'applicant_name' }
-        $guessed = @($j.suggestedTests.guessed)
-        $notExist = @($guessed | Where-Object { -not (Test-Path -LiteralPath (Join-Path $caseRepo $_)) })
-        $hasReal = $guessed -contains 'src\test\java\com\acme\order\OrderServiceTest.java'
-        $hasFalse = $guessed -contains 'src\test\java\com\acme\order\OrderMapperTest.java'
+        $guessed = @($j.suggestedTests.guessed | ForEach-Object { To-Slash $_ })
+        $notExist = @($j.suggestedTests.guessed | Where-Object { -not (Test-Path -LiteralPath (Join-Rel $caseRepo $_)) })
+        $hasReal = $guessed -contains 'src/test/java/com/acme/order/OrderServiceTest.java'
+        $hasFalse = $guessed -contains 'src/test/java/com/acme/order/OrderMapperTest.java'
         Write-Result 'T05 只报告真实存在的测试文件' (($notExist.Count -eq 0) -and $hasReal -and (-not $hasFalse)) `
             "不存在却被报告: $($notExist -join ','); 含真实: $hasReal; 含伪造: $hasFalse"
     }
@@ -191,11 +210,11 @@ try {
 
     # ---------------------------------------------------------------- T09
     Invoke-Case 'T09 无锚点时退出码非零' {
-        $psExe = if ($PSVersionTable.PSEdition -eq 'Core') {
-            Join-Path $PSHOME 'pwsh.exe'
-        } else {
-            Join-Path $PSHOME 'powershell.exe'
-        }
+        $exeName = if ($PSVersionTable.PSEdition -eq 'Core') {
+            if ($env:OS -eq 'Windows_NT') { 'pwsh.exe' } else { 'pwsh' }
+        } else { 'powershell.exe' }
+        $psExe = Join-Path $PSHOME $exeName
+
         # 造一个"无改动"的仓库：-Diff HEAD 取不到锚点，应显式失败而不是静默扫空
         $emptyRepo = Join-Path $tmpRoot 'emptydiff'
         $sub = Join-Path $emptyRepo 'src'
@@ -205,13 +224,15 @@ try {
         & git -C $emptyRepo add -A 2>$null
         & git -C $emptyRepo -c user.name=test -c user.email=test@example.com commit -qm init 2>$null
 
-        # 5.1 会把原生命令的 stderr 变成终止错误（EAP=Stop 时直接抛），
-        # 所以这里临时降级 EAP，并用 cmd /c 拿真实退出码
-        $cmdLine = '"{0}" -NoProfile -ExecutionPolicy Bypass -File "{1}" -Root "{2}" -Diff HEAD' -f $psExe, $scriptPath, $emptyRepo
+        $exeArgs = @('-NoProfile')
+        if ($env:OS -eq 'Windows_NT') { $exeArgs += @('-ExecutionPolicy', 'Bypass') }
+        $exeArgs += @('-File', $scriptPath, '-Root', $emptyRepo, '-Diff', 'HEAD')
+
+        # 5.1 会把原生命令的 stderr 变成终止错误（EAP=Stop 时直接抛），临时降级
         $prevEap = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
         try {
-            & cmd /c $cmdLine 2>&1 | Out-Null
+            & $psExe @exeArgs *> $null
             $code = $LASTEXITCODE
         }
         finally {

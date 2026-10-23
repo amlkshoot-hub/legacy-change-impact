@@ -1,4 +1,4 @@
-# legacy-change-impact
+﻿# legacy-change-impact
 
 > 改老代码之前，先摸清会炸到哪。
 
@@ -152,7 +152,7 @@ pwsh -File .\tests\run-tests.ps1
 
 9 项断言，覆盖：SKILL.md 元数据、变体派生与大小写去重、camelCase 命中、三层分类、测试文件存在性、diff 文件类型过滤、CRLF 行尾、JSON 结构、失败退出码。
 
-CI 在 Windows 上分别用 **pwsh 7** 和 **Windows PowerShell 5.1** 各跑一遍（[verify.yml](.github/workflows/verify.yml)）。
+CI 在三个运行时上各跑一遍：**pwsh 7（Windows）**、**Windows PowerShell 5.1**、**pwsh 7（Ubuntu）**，见 [verify.yml](.github/workflows/verify.yml)。
 
 ## 设计原则
 
@@ -181,11 +181,12 @@ CI 在 Windows 上分别用 **pwsh 7** 和 **Windows PowerShell 5.1** 各跑一�
 - `-Diff` 靠正则识别"定义行"：包级私有方法、lambda、部分动态语言写法可能提取不到；提取为 0 个锚点时会报错而不是静默扫空
 - `.md` 不在扫描扩展名内。文档里的引用会漏（案例中有 2 处）
 - 只做静态分析：反射、动态 SQL、跨仓库契约需要人工补
-- 脚本是 PowerShell，Linux/macOS 上需要 pwsh
+- 脚本是 PowerShell，Linux/macOS 上需要 pwsh（Ubuntu 已由 CI 覆盖，其他发行版未逐个验证）
 
 ## 兼容性
 
-- Windows PowerShell 5.1 和 PowerShell 7 均已实测，并各有 CI 覆盖
+- 三个运行时都有 CI 覆盖：**pwsh 7（Windows）**、**Windows PowerShell 5.1**、**pwsh 7（Ubuntu）**
+- 路径处理按段拼接，不依赖分隔符；v1.0.1 起在 Ubuntu 上实测通过（此前只在 Windows 验证过）
 - 脚本带 BOM，避免 5.1 把中文注释按 ANSI 解析
 - 实测样本：1183 个文件的 Spring Boot + Vue 项目，单符号约 2.5 秒，`-Git` 约 27 秒
 
